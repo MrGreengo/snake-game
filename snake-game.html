@@ -246,12 +246,6 @@ let touchStartX = 0;
 let touchStartY = 0;
 
 // ---- Touch event listeners ----
-canvas.addEventListener('touchstart', function (e) {
-  // Get the first touch (finger 0).
-  const touch = e.touches[0];
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-}, { passive: false });
 
     
 canvas.addEventListener('touchstart', function (e) {
