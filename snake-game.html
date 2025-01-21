@@ -264,6 +264,14 @@ canvas.addEventListener('touchmove', function (e) {
   e.preventDefault();  // Stop scrolling while moving
 }, { passive: false });
 
+    canvas.addEventListener('touchend', function (e) {
+  e.preventDefault();  // Stop any default “tap” behavior
+  const touch = e.changedTouches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+      
   // Decide which direction is the greatest distance to determine swipe direction
   if (absDx > absDy) {
     // Horizontal swipe
