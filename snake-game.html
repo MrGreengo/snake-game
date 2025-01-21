@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Snake Game with Letter Blocks</title>
+  <title>Refined Snake Game with Letter Blocks</title>
   <style>
     /* === Container that holds the game and the puzzle/word info === */
     .game-wrapper {
       display: flex;
-      align-items: flex-start; /* keep top aligned */
-      margin: 0 40px; /* 40px margin left & right, as requested */
+      align-items: flex-start;
+      margin: 0 40px; /* 40px margin on left & right */
     }
 
     /* === The canvas for the snake game === */
@@ -17,8 +17,6 @@
       background-color: #fafafa;
       width: 585px;
       height: 585px;
-      /* Force a 1:1 ratio on high-DPI screens by controlling the actual
-         drawing buffer separately in JS, or use the style size as needed. */
       display: block;
     }
 
@@ -48,44 +46,60 @@
     <div class="puzzle-area">
       <h2>Find the Missing Letter</h2>
       <div class="word" id="wordDisplay">c_t</div>
+      <div id="scoreDisplay">Score: 0</div>
+      <div id="highScoreDisplay">High Score: 0</div>
       <div>Controls: Arrow keys or swipe on the canvas</div>
     </div>
   </div>
 
   <script>
-    // === GLOBALS ===
+    // === GLOBALS & INITIAL SETUP ===
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
-    // You can treat the board as a grid. For example:
-    // 13 x 13 cells of 45px each = 585px total
+    // We treat the board as a 13 x 13 grid, each cell 45px.
     const cols = 13;
     const rows = 13;
     const cellSize = 45;
 
-    // Snake initial setup (start in the middle)
+    // Snake initial setup: start with length 3
     let snake = [
-      { x: 6, y: 6 } // middle of a 13x13 grid
+      { x: 6, y: 6 }, // head
+      { x: 5, y: 6 }, // body
+      { x: 4, y: 6 }  // tail
     ];
-    let direction = { x: 0, y: 0 }; // initial direction = none (standing still)
-    let snakeSpeed = 5; // move steps per second
+    // Initial direction is (0,0) so the snake waits for input
+    // Alternatively, you could set a default direction, e.g. moving right.
+    let direction = { x: 0, y: 0 };
+
+    // For controlling game flow
+    let gameActive = true;
+
+    // Define the puzzle
+    let puzzleWord = 'c_t';
+    const correctLetter = 'a';
+
+    // Place letter “foods” (one correct, two distractors)
+    let foods = [
+      { x: 2,  y: 2,  letter: 'a' }, // correct
+      { x: 10, y: 10, letter: 'e' }, // distractor
+      { x: 5,  y: 8,  letter: 'f' }  // distractor
+    ];
+
+    // Scoring
+    let currentScore = 0;
+    let highScore = 0;
+
+    // Speed & timing
+    let snakeSpeed = 5; // moves per second
     let lastFrameTime = 0;
 
-    // We can store multiple letter “foods”
-    // e.g., "a" is the correct letter, "e", "f" are distractors.
-    let foods = [
-      { x: 2,  y: 2,  letter: 'a' },
-      { x: 10, y: 10, letter: 'e' },
-      { x: 5,  y: 8,  letter: 'f' }
-    ];
-    const correctLetter = 'a';
-    let puzzleWord = 'c_t'; // shown to user; try to fill the underscore
-
-    // --- KEYBOARD CONTROL ---
+    // === KEYBOARD CONTROL ===
     document.addEventListener('keydown', (e) => {
+      if (!gameActive) return; // ignore input if game is over
       switch (e.key) {
         case 'ArrowUp':
-          if (direction.y === 1) break; // prevent going down->up instantly
+          if (direction.y === 1) break;  // prevent going directly down->up
           direction = { x: 0, y: -1 };
           break;
         case 'ArrowDown':
@@ -103,7 +117,7 @@
       }
     });
 
-    // --- TOUCH / SWIPE CONTROL ---
+    // === TOUCH / SWIPE CONTROL ===
     let touchStartX = 0;
     let touchStartY = 0;
 
@@ -113,11 +127,13 @@
       touchStartY = touch.clientY;
     });
 
+    // Prevent mobile scrolling while swiping
     canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault(); // prevent scrolling on mobile
+      e.preventDefault();
     }, { passive: false });
 
     canvas.addEventListener('touchend', (e) => {
+      if (!gameActive) return;
       const touch = e.changedTouches[0];
       const deltaX = touch.clientX - touchStartX;
       const deltaY = touch.clientY - touchStartY;
@@ -140,13 +156,37 @@
       }
     });
 
-    // === GAME LOOP ===
+    // === SCORING HELPERS ===
+    function updateScore(points) {
+      currentScore += points;
+      document.getElementById('scoreDisplay').textContent = 'Score: ' + currentScore;
+    }
+
+    function checkHighScore() {
+      if (currentScore > highScore) {
+        highScore = currentScore;
+        document.getElementById('highScoreDisplay').textContent = 'High Score: ' + highScore;
+      }
+    }
+
+    // === GAME OVER LOGIC ===
+    function gameOver() {
+      gameActive = false;
+      // Check if we beat the high score
+      checkHighScore();
+      // Display a message in the puzzle area
+      document.getElementById('wordDisplay').textContent = 'Game Over!';
+    }
+
+    // === MAIN GAME LOOP ===
     function gameLoop(timestamp) {
       requestAnimationFrame(gameLoop);
       
+      if (!gameActive) return; // no updates if game is inactive
+
       const secondsSinceLastFrame = (timestamp - lastFrameTime) / 1000;
       if (secondsSinceLastFrame < (1 / snakeSpeed)) {
-        return; // limit update rate
+        return;
       }
       lastFrameTime = timestamp;
 
@@ -156,40 +196,41 @@
 
     // === UPDATE LOGIC ===
     function update() {
-      // 1. Move snake
-      const head = { ...snake[0] };
-      head.x += direction.x;
-      head.y += direction.y;
+      // 1. Compute new head position
+      const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
 
-      // Wrap the snake if it goes off the edge (typical Snake feature)
-      if (head.x < 0) head.x = cols - 1;
-      if (head.x >= cols) head.x = 0;
-      if (head.y < 0) head.y = rows - 1;
-      if (head.y >= rows) head.y = 0;
+      // 2. Check wall collision => game over if out of bounds
+      if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
+        gameOver();
+        return;
+      }
 
-      // 2. Check if snake hits food
+      // 3. Check if snake eats a letter
       for (let i = 0; i < foods.length; i++) {
         if (head.x === foods[i].x && head.y === foods[i].y) {
-          // If the letter is the correct one, fill the puzzle
+          // If it's the correct letter
           if (foods[i].letter === correctLetter) {
-            puzzleWord = puzzleWord.replace('_', correctLetter); // replace underscore with correct letter
+            // Replace underscore with correct letter in puzzle
+            puzzleWord = puzzleWord.replace('_', correctLetter);
             document.getElementById('wordDisplay').textContent = puzzleWord;
-            
-            // You can trigger a "success" or next-level flow here
-            // For demonstration, just remove the correct letter from the board
+
+            // Increase score (adjust points to your liking)
+            updateScore(10);
+          } else {
+            // Wrong letter => game over
+            gameOver();
+            return;
           }
-          // Remove that food from the array
+          // Remove that food from the board
           foods.splice(i, 1);
-          i--;
-          
-          // Grow snake by 1
+
+          // Grow snake by adding head to front (no pop)
           snake.unshift(head);
-          return; // finish update here (snake has grown)
+          return; // end update (no further movement)
         }
       }
 
-      // 3. Move snake body
-      // Remove last segment if we didn't grow
+      // 4. Move snake (if no food was eaten, shift the tail)
       snake.unshift(head);
       snake.pop();
     }
@@ -207,23 +248,24 @@
 
       // Draw food (letter blocks)
       foods.forEach((food) => {
-        // Fill block background
+        // Block background
         ctx.fillStyle = '#ff0000';
         ctx.fillRect(food.x * cellSize, food.y * cellSize, cellSize, cellSize);
-        // Draw letter
+
+        // Letter text
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 20px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(
           food.letter.toUpperCase(),
-          (food.x * cellSize) + cellSize / 2,
-          (food.y * cellSize) + cellSize / 2
+          food.x * cellSize + cellSize / 2,
+          food.y * cellSize + cellSize / 2
         );
       });
     }
 
-    // Start game loop
+    // === START GAME ===
     requestAnimationFrame(gameLoop);
   </script>
 </body>
