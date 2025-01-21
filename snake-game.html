@@ -249,12 +249,19 @@ canvas.addEventListener('touchstart', function (e) {
   touchStartY = touch.clientY;
 }, { passive: false });
 
+canvas.addEventListener('touchstart', function (e) {
+  e.preventDefault();  // Stop scrolling on touch start
+  const touch = e.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+}, { passive: false });
+
 canvas.addEventListener('touchmove', function (e) {
-  // Prevent default to avoid the browser scrolling during swipe
-  e.preventDefault();
+  e.preventDefault();  // Stop scrolling while moving
 }, { passive: false });
 
 canvas.addEventListener('touchend', function (e) {
+  e.preventDefault();  // Stop any default “tap” behavior
   const touch = e.changedTouches[0];
   const dx = touch.clientX - touchStartX;
   const dy = touch.clientY - touchStartY;
@@ -283,6 +290,7 @@ canvas.addEventListener('touchend', function (e) {
     gameStarted = true;
   }
 }, { passive: false });
+
 
 
 // For smooth movement
