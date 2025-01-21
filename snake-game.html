@@ -1609,31 +1609,13 @@ lettersOnBoard.forEach(letter => {
         }
       }
       return false;
- /*************************************************************
- *                    COLLISION & RESET
- *************************************************************/
-function checkCollision(x, y) {
-  // Walls
-  if (x < 0 || x >= cols || y < 0 || y >= rows) {
-    return true;
-  }
-  // Snake body collision (skip head i=0)
-  for (let i = 1; i < snake.length; i++) {
-    if (snake[i].x === x && snake[i].y === y) {
-      return true;
     }
-  }
-  return false;
-}
 
  function resetGame() {
-// Called when the snake collides (game over)
-function resetGame() {
   // If user’s final score beats the highScore, update it
   if (score > highScore) {
     highScore = score;
     highScoreValueEl.textContent = highScore; // reflect new high score in UI
-    highScoreValueEl.textContent = highScore; // reflect new high score
   }
 
   // Build full correct word by replacing the underscore
@@ -1646,8 +1628,6 @@ function resetGame() {
     <p>The correct word is:</p>
     <p style="font-size: 2rem; font-weight: bold;">${correctWord}</p>
     <img src="${currentPuzzle.imgSrc}" alt="Puzzle Image" style="margin-top: 10px; max-width: 200px; border-radius: 8px;" />
-    <img src="${currentPuzzle.imgSrc}" alt="Puzzle Image" 
-         style="margin-top: 10px; max-width: 200px; border-radius: 8px;" />
   `;
 
   // Put the HTML inside #resultsOverlayContent
@@ -1659,28 +1639,22 @@ function resetGame() {
   overlay.style.display = "flex";
 
   // Attach a listener to the close button to reset the game after closing the overlay
-  // Attach a one-time listener to the close button to reset the game
   const closeBtn = document.getElementById('closeOverlayBtn');
   closeBtn.addEventListener('click', () => {
     overlay.style.display = "none";
     performGameReset(); // Call the function that resets the game
   }, { once: true }); // Ensure the event listener is only used once
-    performGameReset(); // Call the function that resets everything
-  }, { once: true });
 }
 
 function performGameReset() {
   // Reset game state
-  // Reset score
   score = 0;
   scoreValueEl.textContent = "0";
-  // Reset direction, flags, etc.
   direction = null;
   prevDirection = 'RIGHT';
   aboutToEat = false;
   gameStarted = false;
 
-  // Reset snake to the middle again
   snake = [
     { x: mid,     y: mid },
     { x: mid - 1, y: mid },
@@ -1689,17 +1663,10 @@ function performGameReset() {
   oldSnake = snake.map(s => ({ ...s }));
   pickNewPuzzle();
 
-  // Pick a new puzzle, clear letters, etc.
-  pickNewPuzzle(); // or however you set up your next puzzle
-  lettersOnBoard = [];
-  // Reset timers
   accumulator = 0;
   lastTimestamp = 0;
 }
 
-  // (Optional) you might want to immediately redraw or wait for your next loop
-  // redrawBoard();
-}
 
 
     /*************************************************************
