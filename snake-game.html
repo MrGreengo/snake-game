@@ -245,50 +245,6 @@ let gameStarted = false;  // must press arrow to start movement
 let touchStartX = 0;
 let touchStartY = 0;
 
-// ---- Touch event listeners ----
-
-    
-canvas.addEventListener('touchstart', function (e) {
-  e.preventDefault();  // Stop scrolling on touch start
-  const touch = e.touches[0];
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-}, { passive: false });
-
-canvas.addEventListener('touchmove', function (e) {
-  e.preventDefault();  // Stop scrolling while moving
-}, { passive: false });
-
-    canvas.addEventListener('touchend', function (e) {
-  e.preventDefault();  // Stop any default “tap” behavior
-  const touch = e.changedTouches[0];
-  const dx = touch.clientX - touchStartX;
-  const dy = touch.clientY - touchStartY;
-  const absDx = Math.abs(dx);
-  const absDy = Math.abs(dy);
-      
-  // Decide which direction is the greatest distance to determine swipe direction
-  if (absDx > absDy) {
-    // Horizontal swipe
-    if (dx > 0 && prevDirection !== 'LEFT') {
-      direction = 'RIGHT';
-    } else if (dx < 0 && prevDirection !== 'RIGHT') {
-      direction = 'LEFT';
-    }
-  } else {
-    // Vertical swipe
-    if (dy > 0 && prevDirection !== 'UP') {
-      direction = 'DOWN';
-    } else if (dy < 0 && prevDirection !== 'DOWN') {
-      direction = 'UP';
-    }
-  }
-
-  // Start the game once a valid swipe direction is detected
-  if (!gameStarted && direction !== null) {
-    gameStarted = true;
-  }
-}, { passive: false });
 
 
 
