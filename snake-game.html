@@ -253,12 +253,6 @@ canvas.addEventListener('touchstart', function (e) {
   touchStartY = touch.clientY;
 }, { passive: false });
 
-canvas.addEventListener('touchstart', function (e) {
-  e.preventDefault();  // Stop scrolling on touch start
-  const touch = e.touches[0];
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-}, { passive: false });
 
 canvas.addEventListener('touchmove', function (e) {
   e.preventDefault();  // Stop scrolling while moving
