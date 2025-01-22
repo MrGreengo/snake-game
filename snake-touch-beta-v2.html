@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <!-- Prevent pinch-zooming on mobile -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+  <title>Snake Game (Responsive, Puzzle Version)</title>
+  <style>
+    /* Basic resets and black background */
+    html, body {
+      margin: 0; 
+      padding: 0;
+      background-color: #333;
+      color: #fff;
+      font-family: Helvetica;
+      box-sizing: border-box;
+      /* Disable scrolling on desktop (no scrollbars) */
+      overflow: hidden; 
+    }
+
+    /* Container for the game board & puzzle area */
+    .game-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0 40px; 
+      padding: 20px 0;
+    }
+
+    /* The Canvas: we let JS set its width/height;
+       just give it a border, block layout, black bg. */
+    #gameCanvas {
+      border: 1px solid #fff;
+      background-color: #000;
+      display: block;
+    }
+
+    /* Puzzle area to the right */
+    .puzzle-area {
+      margin-left: 350px;
+      max-width: 350px;
+    }
+
+    .puzzle-area h2 {
+      margin: 0 0 10px;
+    }
+
+    /* Very large puzzle letters */
+    .puzzle-area .word {
+      font-size: 9em;
+      margin-bottom: 10px;
+      line-height: 1;
+    }
+
+    /* Score & High Score text can remain normal size */
+    #scoreDisplay, #highScoreDisplay {
+      margin-bottom: 20px;
+    }
+
+    #wordImage {
+      max-width: 200px;
+      display: block;
+      margin: 10px 0;
+    }
+
+    /* OVERLAY for Game Over */
+    #overlay {
+      position: fixed;
+      top: 0; 
+      left: 0;
+      width: 100%; 
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none; 
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: #fff;
+      z-index: 9999;
+    }
+    #overlay h1 {
+      margin-bottom: 20px;
+      font-size: 2em;
+    }
+    #overlay .correct-word {
+      margin-bottom: 20px;
+      font-size: 1.5em;
+    }
+    #overlay button {
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+
+    /* OVERLAY for Difficulty Selection (shown at start) */
+    #startOverlay {
+      position: fixed;
+      top: 0; 
+      left: 0;
+      width: 100%; 
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex; 
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: #fff;
+      z-index: 9999;
+    }
+    #startOverlay h1 {
+      margin-bottom: 20px;
+      font-size: 2em;
+    }
+    #startOverlay .difficulty-buttons button {
+      margin: 5px;
+      padding: 10px 20px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+
+    /* Media Query: stack the puzzle area below the canvas on narrow screens */
+    @media (max-width: 768px) {
+      .game-wrapper {
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+      }
+      .puzzle-area {
+        margin-left: 0;
+        margin-top: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  
+  <div class="game-wrapper">
+    <!-- The Snake Game Canvas (no fixed width/height here; JS sets it) -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Puzzle / Word Info -->
+    <div class="puzzle-area">
+      <h2>Find the Missing Letter</h2>
+      <div class="word" id="wordDisplay">???</div>
+      <img id="wordImage" src="" alt="Word illustration" />
+      <div id="scoreDisplay">Score: 0</div>
+      <div id="highScoreDisplay">High Score: 0</div>
+      <div>Controls: Arrow keys or swipe on the canvas</div>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="overlay">
+    <h1>Game Over!</h1>
+    <div class="correct-word">The correct word was: <span id="correctWord"></span></div>
+    <button id="playAgainBtn">Play Again</button>
+  </div>
+
+  <!-- Difficulty Selection Overlay (shown at start) -->
+  <div id="startOverlay">
+    <h1>Select Difficulty</h1>
+    <div class="difficulty-buttons">
+      <button data-speed="3">Easy (Slow)</button>
+      <button data-speed="6">Medium (Normal)</button>
+      <button data-speed="9">Hard (Fast)</button>
+    </div>
+  </div>
+
+  <script>
+    // === 1) DISABLE MOBILE SCROLLING ===
+    window.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+
+    // === 2) GET REFERENCES & DECLARE GLOBALS ===
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // The board is conceptually 13x13. We'll dynamically set cellSize.
+    const cols = 13;
+    const rows = 13;
+    let cellSize = 45; // We'll recalc in resizeCanvas().
+
+    // We'll define multiple puzzle sets
+    const puzzleSets = [
+      { puzzle: 'c_t', correctLetter: 'a', complete: 'cat' },
+      { puzzle: 'd_g', correctLetter: 'o', complete: 'dog' },
+      { puzzle: 'p_g', correctLetter: 'i', complete: 'pig' },
+      { puzzle: 'f_x', correctLetter: 'o', complete: 'fox' },
+      { puzzle: 'b_t', correctLetter: 'a', complete: 'bat' }
+    ];
+    let puzzleIndex = 0;
+
+    let puzzleWord    = puzzleSets[puzzleIndex].puzzle;
+    let correctLetter = puzzleSets[puzzleIndex].correctLetter;
+    let correctWord   = puzzleSets[puzzleIndex].complete;
+
+    // Snake starts length 3
+    let snake = [
+      { x: 6, y: 6 },
+      { x: 5, y: 6 },
+      { x: 4, y: 6 }
+    ];
+    // For interpolation, store old vs. new positions each step
+    let snakeOldPositions = JSON.parse(JSON.stringify(snake));
+    let snakeNewPositions = JSON.parse(JSON.stringify(snake));
+
+    // === NEW CODE: TONGUE FLICK VARIABLES ===
+    let tongueInterval = 300;      // how often (ms) we toggle tongue
+    let lastTongueToggle = 0;      // timestamp of last toggle
+    let tongueOut = false;         // tracks if tongue is currently out
+
+    // Direction (tile-based)
+    let direction = { x: 0, y: 0 };
+
+    // Foods
+    let foods = [];
+
+    // Score
+    let currentScore = 0;
+    let highScore = 0;
+
+    // Speed
+    let snakeSpeed = 0;        // moves per second
+    let updateInterval = 0;    // 1 / snakeSpeed
+    let lastTimestamp = 0;     // for animation
+    let timeSinceLastMove = 0; // accumulates dt
+
+    // Game states
+    let gameActive = false;
+    let gameStarted = false;
+
+    // References to DOM elements
+    const wordDisplay       = document.getElementById('wordDisplay');
+    const scoreDisplay      = document.getElementById('scoreDisplay');
+    const highScoreDisplay  = document.getElementById('highScoreDisplay');
+    const overlay           = document.getElementById('overlay');
+    const correctWordSpan   = document.getElementById('correctWord');
+    const playAgainBtn      = document.getElementById('playAgainBtn');
+    const startOverlay      = document.getElementById('startOverlay');
+    const difficultyButtons = document.querySelectorAll('#startOverlay .difficulty-buttons button');
+
+    // === 3) DYNAMIC RESIZING FUNCTION ===
+    function resizeCanvas() {
+      // We'll clamp the canvas to a max of 585
+      const maxSize = 585;
+      // pick the smallest dimension of the viewport
+      const newSize = Math.min(window.innerWidth, window.innerHeight, maxSize);
+
+      // set canvas w/h
+      canvas.width = newSize;
+      canvas.height = newSize;
+
+      // recalc cellSize
+      cellSize = newSize / cols;
+    }
+
+    // Call once now
+    resizeCanvas();
+    // Re-scale on window resize/orientation changes
+    window.addEventListener('resize', resizeCanvas);
+
+    // === 4) HELPER: Distance for "not within 5 squares" ===
+    function distance(a, b) {
+      // Euclidean distance in tile coords
+      return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    }
+
+    // === 5) HELPER: Random integer in [min, max] inclusive ===
+    function randInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // === 6) GENERATE FOODS FOR A PUZZLE ===
+    function generateFoods() {
+      const puzzleData   = puzzleSets[puzzleIndex];
+      correctLetter      = puzzleData.correctLetter;
+      puzzleWord         = puzzleData.puzzle;
+      correctWord        = puzzleData.complete;
+
+      wordDisplay.textContent = puzzleWord;
+
+      const newFoods = [];
+
+      // 1 correct letter, 2 random distractors
+      const lettersToPlace = [ correctLetter ];
+      const alpha = 'abcdefghijklmnopqrstuvwxyz';
+      for (let i = 0; i < 2; i++) {
+        let d;
+        do {
+          d = alpha[randInt(0, alpha.length - 1)];
+        } while (d === correctLetter);
+        lettersToPlace.push(d);
+      }
+
+      // place them in random spots, not within 5 squares of the snake's HEAD
+      const head = snakeNewPositions[0];
+      lettersToPlace.forEach(letter => {
+        let pos;
+        let valid = false;
+        while (!valid) {
+          pos = { x: randInt(0, cols - 1), y: randInt(0, rows - 1) };
+          if (distance(pos, head) >= 5) {
+            const collision = newFoods.some(f => f.x === pos.x && f.y === pos.y);
+            if (!collision) {
+              valid = true;
+            }
+          }
+        }
+        newFoods.push({ x: pos.x, y: pos.y, letter });
+      });
+
+      foods = newFoods;
+    }
+
+    // === 7) DIFFICULTY SELECTION ===
+    difficultyButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        snakeSpeed = Number(btn.getAttribute('data-speed'));
+        updateInterval = 1 / snakeSpeed;
+
+        startOverlay.style.display = 'none'; // hide start overlay
+
+        lastTimestamp = 0;
+        timeSinceLastMove = 0;
+
+        gameActive = true;
+        gameStarted = true;
+
+        // generate foods for the first puzzle (or current puzzleIndex)
+        generateFoods();
+      });
+    });
+
+    // === 8) KEYBOARD CONTROL ===
+    document.addEventListener('keydown', (e) => {
+      if (!gameActive) return;
+      switch (e.key) {
+        case 'ArrowUp':
+          if (direction.y !== 1) direction = { x: 0, y: -1 };
+          break;
+        case 'ArrowDown':
+          if (direction.y !== -1) direction = { x: 0, y: 1 };
+          break;
+        case 'ArrowLeft':
+          if (direction.x !== 1) direction = { x: -1, y: 0 };
+          break;
+        case 'ArrowRight':
+          if (direction.x !== -1) direction = { x: 1, y: 0 };
+          break;
+      }
+    });
+
+    // === 9) TOUCH SWIPE CONTROL ===
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    canvas.addEventListener('touchstart', (e) => {
+      const touch = e.touches[0];
+      touchStartX = touch.clientX;
+      touchStartY = touch.clientY;
+    }, { passive: true });
+
+    // prevent scrolling (we do it again here for safety, but 
+    // the global "touchmove" listener also helps)
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      if (!gameActive) return;
+      const touch = e.changedTouches[0];
+      const deltaX = touch.clientX - touchStartX;
+      const deltaY = touch.clientY - touchStartY;
+
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (deltaX > 0 && direction.x !== -1) {
+          direction = { x: 1, y: 0 };
+        } else if (deltaX < 0 && direction.x !== 1) {
+          direction = { x: -1, y: 0 };
+        }
+      } else {
+        if (deltaY > 0 && direction.y !== -1) {
+          direction = { x: 0, y: 1 };
+        } else if (deltaY < 0 && direction.y !== 1) {
+          direction = { x: 0, y: -1 };
+        }
+      }
+    });
+
+    // === 10) SCORING FUNCTIONS ===
+    function updateScore(points) {
+      currentScore += points;
+      scoreDisplay.textContent = 'Score: ' + currentScore;
+    }
+
+    function checkHighScore() {
+      if (currentScore > highScore) {
+        highScore = currentScore;
+        highScoreDisplay.textContent = 'High Score: ' + highScore;
+      }
+    }
+
+    // === 11) GAME OVER LOGIC ===
+    function gameOver() {
+      gameActive = false;
+      checkHighScore();
+      correctWordSpan.textContent = correctWord;
+      overlay.style.display = 'flex';
+    }
+
+    // === 12) RESTART / RESET GAME ===
+    function resetGame() {
+      overlay.style.display = 'none';
+
+      currentScore = 0;
+      scoreDisplay.textContent = 'Score: 0';
+
+      // reset snake
+      snake = [
+        { x: 6, y: 6 },
+        { x: 5, y: 6 },
+        { x: 4, y: 6 }
+      ];
+      snakeOldPositions = JSON.parse(JSON.stringify(snake));
+      snakeNewPositions = JSON.parse(JSON.stringify(snake));
+
+      direction = { x: 0, y: 0 };
+
+      // start from puzzle 0 again
+      puzzleIndex = 0;
+
+      startOverlay.style.display = 'flex';
+
+      gameStarted = false;
+      gameActive = false;
+      snakeSpeed = 0;
+      timeSinceLastMove = 0;
+    }
+    playAgainBtn.addEventListener('click', resetGame);
+
+    // === 13) MAIN GAME LOOP (with interpolation) ===
+    function gameLoop(timestamp) {
+      requestAnimationFrame(gameLoop);
+
+      // if not started or not active, skip
+      if (!gameStarted) return;
+      if (!gameActive)  return;
+
+      let delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+      if (delta > 0.1) delta = 0.1; // clamp
+
+      timeSinceLastMove += delta;
+
+      // === TONGUE FLICK EVERY 300MS ===
+      if (timestamp - lastTongueToggle > tongueInterval) {
+        lastTongueToggle = timestamp;
+        tongueOut = !tongueOut; 
+      }
+
+      // move the snake as many times as needed
+      while (timeSinceLastMove >= updateInterval) {
+        timeSinceLastMove -= updateInterval;
+        snakeOldPositions = JSON.parse(JSON.stringify(snakeNewPositions));
+        doGameUpdate();
+      }
+
+      // then draw with interpolation
+      drawGame();
+    }
+
+    // === 14) LOGIC UPDATE (1 step) ===
+    function doGameUpdate() {
+      // skip collision if direction == (0,0)
+      if (direction.x === 0 && direction.y === 0) return;
+
+      // new head in tile coords
+      const head = {
+        x: snakeNewPositions[0].x + direction.x,
+        y: snakeNewPositions[0].y + direction.y
+      };
+
+      // wall collision?
+      if (head.x < 0 || head.x >= cols || head.y < 0 || head.y >= rows) {
+        gameOver();
+        return;
+      }
+
+      // self collision?
+      for (let i = 0; i < snakeNewPositions.length; i++) {
+        if (head.x === snakeNewPositions[i].x && head.y === snakeNewPositions[i].y) {
+          gameOver();
+          return;
+        }
+      }
+
+      // food collision?
+      for (let i = 0; i < foods.length; i++) {
+        if (head.x === foods[i].x && head.y === foods[i].y) {
+          // correct letter?
+          if (foods[i].letter === correctLetter) {
+            puzzleWord = puzzleWord.replace('_', correctLetter);
+            wordDisplay.textContent = puzzleWord;
+            updateScore(10);
+
+            // go to next puzzle
+            puzzleIndex = (puzzleIndex + 1) % puzzleSets.length;
+            generateFoods();
+          } else {
+            // wrong letter => game over
+            gameOver();
+            return;
+          }
+          // grow snake
+          snakeNewPositions.unshift(head);
+          return;
+        }
+      }
+
+      // normal move
+      snakeNewPositions.unshift(head);
+      snakeNewPositions.pop();
+    }
+
+    // === 15) DRAW WITH INTERPOLATION ===
+    function drawGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const alpha = timeSinceLastMove / updateInterval;
+
+      // === REPLACED CODE: Snake with Eyes + Tongue Flick ===
+      for (let i = 0; i < snakeNewPositions.length; i++) {
+        const oldPos = snakeOldPositions[i];
+        const newPos = snakeNewPositions[i];
+
+        const interpX = (oldPos.x + alpha * (newPos.x - oldPos.x)) * cellSize;
+        const interpY = (oldPos.y + alpha * (newPos.y - oldPos.y)) * cellSize;
+
+        if (i === 0) {
+          // HEAD with eyes + flicking tongue
+          drawSnakeHead(interpX, interpY, direction.x, direction.y, tongueOut);
+        } else {
+          // BODY
+          ctx.fillStyle = '#0f0';
+          ctx.fillRect(interpX, interpY, cellSize, cellSize);
+        }
+      }
+
+      // draw foods (letters)
+      foods.forEach(food => {
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(food.x * cellSize, food.y * cellSize, cellSize, cellSize);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 30px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          food.letter,
+          (food.x * cellSize) + cellSize / 2,
+          (food.y * cellSize) + cellSize / 2
+        );
+      });
+    }
+
+    // === New Helper: drawSnakeHead (eyes + optional tongue) ===
+    function drawSnakeHead(px, py, dirX, dirY, flickTongue) {
+      // 1) Draw the main green square
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(px, py, cellSize, cellSize);
+
+      // If the snake's direction is (0,0), default to facing right
+      if (dirX === 0 && dirY === 0) {
+        dirX = 1;  // not moving => eyes face right
+      }
+
+      // 2) Eyes: two small white arcs
+      const eyeRadius = cellSize * 0.08; 
+      let eye1offsetX, eye1offsetY;
+      let eye2offsetX, eye2offsetY;
+
+      if (dirY === -1) {
+        // facing UP
+        eye1offsetX = cellSize * 0.25;  eye1offsetY = cellSize * 0.15;
+        eye2offsetX = cellSize * 0.75;  eye2offsetY = cellSize * 0.15;
+      } else if (dirY === 1) {
+        // facing DOWN
+        eye1offsetX = cellSize * 0.25;  eye1offsetY = cellSize * 0.85;
+        eye2offsetX = cellSize * 0.75;  eye2offsetY = cellSize * 0.85;
+      } else if (dirX === 1) {
+        // facing RIGHT
+        eye1offsetX = cellSize * 0.75;  eye1offsetY = cellSize * 0.25;
+        eye2offsetX = cellSize * 0.75;  eye2offsetY = cellSize * 0.75;
+      } else {
+        // facing LEFT
+        eye1offsetX = cellSize * 0.25;  eye1offsetY = cellSize * 0.25;
+        eye2offsetX = cellSize * 0.25;  eye2offsetY = cellSize * 0.75;
+      }
+
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(px + eye1offsetX, py + eye1offsetY, eyeRadius, 0, 2 * Math.PI);
+      ctx.arc(px + eye2offsetX, py + eye2offsetY, eyeRadius, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // 3) Tongue if flickTongue == true
+      if (!flickTongue) return; // if tongueOut=false, skip
+
+      ctx.fillStyle = '#f00'; 
+      const tongueWidth = cellSize * 0.06;
+      const tongueLength = cellSize * 0.2; 
+
+      let tx, ty;
+      if (dirY === -1) {
+        // facing UP
+        tx = px + cellSize * 0.5 - (tongueWidth / 2);
+        ty = py - (tongueLength * 0.2);
+        ctx.fillRect(tx, ty, tongueWidth, tongueLength);
+      } else if (dirY === 1) {
+        // facing DOWN
+        tx = px + cellSize * 0.5 - (tongueWidth / 2);
+        ty = py + cellSize - (tongueLength * 0.0);
+        ctx.fillRect(tx, ty, tongueWidth, tongueLength);
+      } else if (dirX === 1) {
+        // facing RIGHT
+        tx = px + cellSize - (tongueLength * 0.0);
+        ty = py + cellSize * 0.5 - (tongueWidth / 2);
+        ctx.fillRect(tx, ty, tongueLength, tongueWidth);
+      } else {
+        // facing LEFT
+        tx = px - (tongueLength * 0.2);
+        ty = py + cellSize * 0.5 - (tongueWidth / 2);
+        ctx.fillRect(tx, ty, tongueLength, tongueWidth);
+      }
+    }
+
+    // Start the main loop
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
